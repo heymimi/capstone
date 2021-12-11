@@ -1,0 +1,46 @@
+# MaNGA DAP 불러오고 시각화
+# 예시 ; 8718-9101 or 8603-12704 or 8613-12702 or 7443-12703
+# DAP 파일 이용하여 데이터를 시각화,분석할 수 있음 - 사이트에서는 Marvin을 추천함
+
+import numpy
+from astropy.io import fits
+from matplotlib import pyplot
+pyplot.ion()
+
+hdu = fits.open('C:/Users/CHOI/Desktop/manga-8718-9101-MAPS-HYB10-GAU-MILESHC.fits') # maps 파일 불러오기
+hdu.info()
+
+# ionized gas velocity field 생성
+
+# 여러 방출선들을 하나의 사전으로 만듦
+
+emline = {}
+for k, v in hdu['EMLINE_GFLUX'].header.items():
+    if k[0] == 'C':
+        try:
+            i = int(k[1:])-1
+        except ValueError:
+            continue
+        emline[v] = i
+
+mask_ext = hdu['EMLINE_GVEL'].header['QUALDATA']
+
+
+# 방출선이 매우 잘 검출된 영역을 얻고자할때, 역분산(inverse variances)으로 주어진 flux 불확실성을 알아야함.
+
+ivar_extension = hdu['EMLINE_GFLUX'].header['ERRDATA'] # ERRDATA 이용
+
+# line flux가 S/N < 10인 per spaxel 계산하고 이를 이용해 S/N < 10인 spaxel을 제거
+# ionized gas velocity field은 H-alpha flux가 S/N>10을 갖는 영역으로 제한됨
+
+snr_map = hdu['EMLINE_GFLUX'].data[emline['Ha-6564'],:,:]*numpy.sqrt(hdu[ivar_extension].data[emline['Ha-6564'],:,:])
+sncut = 10
+gas_vfield_alt = numpy.ma.MaskedArray(hdu['EMLINE_GVEL'].data[emline['Ha-6564'],:,:], mask=(hdu[mask_ext].data[emline['Ha-6564'],:,:]>0) | (snr_map[:,:] < sncut))
+
+pyplot.clf()
+pyplot.imshow(gas_vfield_alt, origin='lower', interpolation='nearest', vmin=-125, vmax=125, cmap='RdBu_r')
+pyplot.colorbar()
+
+# gas velocity field 에 대한 유의할 점 ;
+# 방출선의 속도는 서로 연결되어 있기 때문에 [OII]-5007 선의 속도는 불확실성의 경우 H-alpha 선과 같다. 
+# 여러 선의 속도를 함께 평균화하는 방법으로는 측정된 속도의 불확실성을 줄일 수 없다.
