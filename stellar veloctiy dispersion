@@ -1,0 +1,49 @@
+# MaNGA DAP 불러오고 시각화
+# 예시 ; 8718-9101 or 8603-12704 or 8613-12702 or 7443-12703
+# DAP 파일 이용하여 데이터를 시각화,분석할 수 있음 - 사이트에서는 Marvin을 추천함
+
+import numpy
+from astropy.io import fits
+from matplotlib import pyplot
+pyplot.ion()
+
+hdu = fits.open('C:/Users/CHOI/Desktop/1-136125/manga-8991-12705-MAPS-HYB10-GAU-MILESHC.fits') # maps 파일 불러오기
+hdu.info()
+
+# stellar velocity dispersion 생성
+
+disp_raw = hdu['STELLAR_SIGMA'].data # raw dispersion 측정량 확인
+
+# STELLAR_SIGMACORR 에 들어있는 instrumental resolution(장치에 의한 분해능)에 대해 측정된 dispersion을 보정해야함
+
+disp_inst = hdu['STELLAR_SIGMACORR'].data
+
+# 보정 적용한 결과(mask 값 제거함) , 보정이 측저된 dispersion 보다 큰 모든 점들을 무시
+
+disp_stars_corr = numpy.sqrt(numpy.square(disp_raw) - numpy.square(disp_inst)) # raw 값에서 분해능에 대해 측정된 값을 뺌(보정)
+mask_ext = hdu['STELLAR_SIGMA'].header['QUALDATA'] # mask
+disp_stars_final = numpy.ma.MaskedArray(disp_stars_corr,mask = (hdu[mask_ext].data > 0)) # mask값도 제거함 
+
+
+pyplot.clf()
+pyplot.imshow(disp_stars_final,origin='lower',interpolation='nearest',cmap='RdBu_r')
+pyplot.colorbar()
+
+pyplot.minorticks_on()
+pyplot.tick_params(axis='both', which='both', direction='in', right=True, top=True, labelsize=12)
+
+# 결과는 instrumental resolution에 대해 보정한 stellar velocity dispersion
+
+"""
+# 만약에 순수 stellasr velocity 얻고 싶다면
+
+disp_vel = hdu['STELLAR_VEL'].data
+mask_extension = hdu['STELLAR_VEL'].header['QUALDATA']
+masked_image = numpy.ma.array(hdu['STELLAR_VEL'].data, mask=hdu[mask_extension].data>0)
+
+pyplot.clf()
+pyplot.imshow(masked_image,origin='lower',interpolation='nearest',cmap='RdBu_r')
+pyplot.colorbar()
+
+# 여기서 mask 제거 등 작업 거치면 보정된 stellar velocity 얻을 것
+"""
