@@ -1,0 +1,45 @@
+# MaNGA DAP 불러오고 시각화
+# 예시 ; 8718-9101 or 8603-12704 or 8613-12702 or 7443-12703
+# DAP 파일 이용하여 데이터를 시각화,분석할 수 있음 - 사이트에서는 Marvin을 추천함
+
+import numpy
+from astropy.io import fits
+from matplotlib import pyplot
+pyplot.ion()
+
+hdu = fits.open('C:/Users/CHOI/Desktop/1-136125/manga-9085-12705-MAPS-HYB10-GAU-MILESHC.fits') # maps 파일 불러오기
+hdu.info()
+
+# unique bins 식별
+
+# spaxel은 측정 방식에 따라 보정되는 방식이 다름.
+# 이 binning은 두 개의 spaxel이 같은 bin에 속할 수 있고, 이는 해당 위치에서 나온 양이 동일함을 의미함.
+# header 내 BINID은 어떤 spaxel이 어떤 bin에 있는지 알려줌.
+# spaxel의 ID를 제공하는 5개의 channel이 있음
+"""
+channel
+0: 각 bin 스펙트럼. BINID=-1인 모든 spaxel은 bin에 포함되지 않음.
+1: 별의 운동학적 적합성을 가진 bin 스펙트럼.
+2: 방출선 moment 측정량이 있는 bin 스펙트럼.
+3: 방출선 적합성 가진 bin 스펙트럼.
+4: spectrum-index 측정이 가능한 bin 스펙트럼.
+"""
+
+# 분석을 위해 고유한 스펙트럼 및 Map 값을 추출할 수 있음.
+# ex) 별의 운동학이 들어맞는 unique bin의 index를 찾으려면
+
+bin_indx = hdu['binid'].data[1,:,:]
+unique_bins, unique_indices = tuple(map(lambda x : x[1:], numpy.unique(bin_indx.ravel(), return_index=True)))
+
+pyplot.clf()
+
+# Get the x and y coordinates and the stellar velocities
+x = hdu['BIN_LWSKYCOO'].data[0,:,:].ravel()[unique_indices]
+y = hdu['BIN_LWSKYCOO'].data[1,:,:].ravel()[unique_indices]
+v = numpy.ma.MaskedArray(hdu['STELLAR_VEL'].data.ravel()[unique_indices], mask=hdu['STELLAR_VEL_MASK'].data.ravel()[unique_indices] > 0)
+
+pyplot.scatter(x, y, c=v, vmin=-150, vmax=150, cmap='RdBu', marker='.', s=30, lw=0, zorder=3)
+pyplot.colorbar()
+
+# 나온 결과는 값별로 색상으로 구별된 bin 스펙트럼의 각 unique stellar velocity 측정량의 위치
+
