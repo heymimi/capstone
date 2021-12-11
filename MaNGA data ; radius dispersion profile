@@ -1,0 +1,150 @@
+# radius-dispersion graph
+# MaNGA ID: 1-135030
+# Plate-IFU: 8603-12704
+
+import numpy as np
+import astropy
+from astropy.io import fits
+import matplotlib.pyplot as plt
+from scipy import stats
+np.seterr(divide='ignore', invalid='ignore')
+
+# data normalization function
+def Normalize(data, radius):
+    maxind = np.where(radius == np.nanmin(radius))[0]
+    data0 = data[maxind]
+    return data / data0   # !exclude nan from calculation
+
+##################################################################################################
+# CONTROL GALAXIES
+control_galaxies = ['8991-12705', '7992-1902', '8080-12701', '8330-12701', '8241-6102']
+#control_galaxies = ['9881-6102']
+
+fig = plt.figure(figsize=(15, 10))
+for i in np.arange(len(control_galaxies)):
+    with fits.open(('C:/Users/CHOI/Desktop/1-136125/manga-{}-MAPS-HYB10-GAU-MILESHC.fits').format(control_galaxies[i])) as hdu:    # maps 파일 불러오기
+        hdu.info()
+
+        bin = hdu['BIN_AREA'].data
+        mask = np.where(bin < 3.5)  # SNR이 높은 bin의 index
+
+        # stellar velocity dispersion 생성
+        disp_raw = hdu['STELLAR_SIGMA'].data # raw dispersion 측정량 확인
+
+        # STELLAR_SIGMACORR 에 들어있는 instrumental resolution(장치에 의한 분해능)에 대해 측정된 dispersion을 보정해야함
+        disp_inst = hdu['STELLAR_SIGMACORR'].data
+
+        # 보정 적용한 결과(mask 값 제거함) , 보정이 측저된 dispersion 보다 큰 모든 점들을 무시
+        disp_stars_corr = np.sqrt(np.square(disp_raw) - np.square(disp_inst)) # raw 값에서 분해능에 대해 측정된 값을 뺌(보정)
+
+        mask_ext = hdu['STELLAR_SIGMA'].header['QUALDATA'] # mask
+        disp_stars_final = np.ma.MaskedArray(disp_stars_corr, mask = (hdu[mask_ext].data > 0)) # mask값도 제거함
+
+        disp_stars_final = disp_stars_final[mask]
+
+        # radius normalized by elliptical Petrosian effective radius
+        ellcoo = hdu['SPX_ELLCOO'].data[1]      # normalized radii
+        ellcoo = ellcoo[mask]
+
+    # plot radius-velocity dispersion
+    radii = ellcoo.flatten()    # radii 2d -> 1d array
+    disp = disp_stars_final.flatten()   # dispersion 2d -> 1d array
+
+    # bin and calculate dispersion average
+    statistics, bin_edges, binnum = stats.binned_statistic(radii, disp, 'median', bins=np.arange(0, 1.5, 0.05))
+    bin_len = bin_edges[1] - bin_edges[0]
+    bin_cent = bin_edges[:-1] + bin_len
+
+    norm_disp = Normalize(statistics, bin_cent)     # Normalize data to 0~1
+
+    #plt.scatter(radii, norm_disp, alpha=0.5, marker='o', label='{}'.format(i))        # scatter
+    if i == 0:
+        plt.plot(bin_cent, norm_disp, marker='o', lw=5, label='{} $(\sigma_v\ median)$'.format(control_galaxies[i]))      # dispersion means
+    else: plt.plot(bin_cent, norm_disp, marker='o', lw=5, label='{}'.format(control_galaxies[i]))
+
+
+#####################################################################################################
+# RING GALAXY
+with fits.open('C:/Users/CHOI/Desktop/1-136125/manga-8613-12702-MAPS-HYB10-GAU-MILESHC.fits') as hdu:    # maps 파일 불러오기
+    hdu.info()
+
+    bin = hdu['BIN_AREA'].data
+    mask = np.where(bin < 3.5)  # SNR이 높은 bin의 index
+
+    # stellar velocity dispersion 생성
+    disp_raw = hdu['STELLAR_SIGMA'].data # raw dispersion 측정량 확인
+
+    # STELLAR_SIGMACORR 에 들어있는 instrumental resolution(장치에 의한 분해능)에 대해 측정된 dispersion을 보정해야함
+    disp_inst = hdu['STELLAR_SIGMACORR'].data
+
+    # 보정 적용한 결과(mask 값 제거함) , 보정이 측저된 dispersion 보다 큰 모든 점들을 무시
+    disp_stars_corr = np.sqrt(np.square(disp_raw) - np.square(disp_inst)) # raw 값에서 분해능에 대해 측정된 값을 뺌(보정)
+
+    mask_ext = hdu['STELLAR_SIGMA'].header['QUALDATA'] # mask
+    disp_stars_final = np.ma.MaskedArray(disp_stars_corr, mask=(hdu[mask_ext].data > 0))   # mask값도 제거함
+
+    ellcoo = hdu['SPX_ELLCOO'].data[1]      # elliptical_radius values
+
+    # object coordinates
+    coord = hdu['SPX_SKYCOO'].data  # sky-right offsets in arcsec. +x toward +RA, +y toward +DEC in arcsec
+    objra = hdu[0].header['OBJRA']      # galaxy center RA
+    objdec = hdu[0].header['OBJDEC']    # galaxy center DEC
+
+# calculate ring location index
+def ring_index(coord, objra, objdec, ra, dec):
+    ring_coord = [(ra - objra)*3600, (dec-objdec)*3600]   # ring RA, DEC coordinates relative to center in arcsec
+    rra = ring_coord[0]     # ring RA coordinate relative to center in arcsec
+    rdec = ring_coord[1]    # ring DEC "
+    raind = np.argmin(np.abs(coord[0][0] - rra))    # closest RA index
+    decind = np.argmin(np.abs(coord[1][0, :] - rdec))   # closest DEC index
+    return raind, decind        # return [RA index, DEC index]
+
+# ring RA, DEC from SDSS DR16 Navigate Tool
+ra_a = 254.04626     # a axis ring RA
+dec_a = 34.83790    # a axis ring DEC
+ra_b = 254.04410    # b axis ring RA
+dec_b = 34.83651   # b axis ring DEC
+
+# ring radius
+len_a = ellcoo[ring_index(coord, objra, objdec, ra_a, dec_a)]   # a axis length
+len_b = ellcoo[ring_index(coord, objra, objdec, ra_b, dec_b)]   # b axis length
+ring_r = np.sqrt(len_a * len_b)
+
+"""
+# 빈 공간
+ra_s = 254.04550    # RA, DEC for short axis
+dec_s = 34.83691
+ra_l = 254.04626    # RA, DEC for long axis
+dec_l = 34.83790
+"""
+
+"""
+len_s = ellcoo[ring_index(coord, objra, objdec, ra_s, dec_s)]
+len_l = ellcoo[ring_index(coord, objra, objdec, ra_l, dec_l)]
+space_r = np.sqrt(len_s * len_l)
+"""
+
+# plot radius-velocity dispersion
+disp_stars_final = disp_stars_final[mask]
+disp = disp_stars_final.flatten()   # dispersion 2d -> 1d array
+ellcoo = ellcoo[mask]
+radii = ellcoo.flatten()  # radii 2d -> 1d array
+norm_disp = Normalize(disp, radii)     # Normalize data to 0~1
+
+plt.scatter(radii, norm_disp, c='red', alpha=0.5, marker='^', label='8613-12702 (ring)')        # scatter
+plt.axvline(x=ring_r, c='k', lw=1, ls='--', alpha=0.7)      # ring radius
+# plt.axvspan(len_s, len_l, fc='k', lw=1, alpha=0.1)          # 빈 공간
+
+plt.minorticks_on()
+plt.tick_params(which='both', axis='both', right=True, top=True, direction='in', labelsize=17)
+
+plt.xlabel(r'r / $R_e$', fontsize=25, labelpad=10)
+plt.ylabel(r'$\sigma_{velocity}$', fontsize=25, labelpad=10)
+
+plt.legend(fontsize=15, frameon=False, loc='best')
+
+plt.savefig('C:/Users/CHOI/Desktop/1-136125/8613-12702_radius-dispersion_dispmedian.pdf')
+#plt.savefig('./8603-12704_radius-dispersion_dispmean.pdf')
+
+
+plt.show()
