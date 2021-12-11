@@ -1,0 +1,51 @@
+# MaNGA DAP 불러오고 시각화
+# 예시 ; 8718-9101 or 8603-12704 or 8613-12702 or 7443-12703
+# DAP 파일 이용하여 데이터를 시각화,분석할 수 있음 - 사이트에서는 Marvin을 추천함
+
+import numpy
+from astropy.io import fits
+from matplotlib import pyplot
+pyplot.ion()
+
+hdu = fits.open('C:/Users/CHOI/Desktop/1-136125/manga-7815-12705-MAPS-HYB10-GAU-MILESHC.fits') # maps 파일 불러오기
+hdu.info()
+
+# spectral-index measurements
+# spectral-index 표시, velocity dispersion 대해 보정하는 내용
+# spectral-index는 heaser 내 SPECINDEX 에 해당됨
+
+# spectral-index 에 대한 사전 생성
+
+spec_ind = {}
+spec_unit = numpy.empty(numpy.shape(hdu['SPECINDEX'].data)[0],dtype=object)
+for k, v in hdu['SPECINDEX'].header.items():
+    if k[0] == 'C':
+        try:
+            i = int(k[1:])-1
+        except ValueError:
+            continue
+        spec_ind[v] = i
+    if k[0] == 'U':
+        try:
+            i = int(k[1:])-1
+        except ValueError:
+            continue
+        spec_unit[i] = v.strip()
+        
+# H-beta spectral-index 갖는 mask 배열 생성
+        
+mask_ext = hdu['SPECINDEX'].header['QUALDATA']
+hb_raw = numpy.ma.MaskedArray(hdu['SPECINDEX'].data[spec_ind['Hb'],:,:],mask=hdu[mask_ext].data[spec_ind['Hb'],:,:]>0)
+
+# spectral-index 측정량은 velocity dispersion 대해 보정되야함. 이때 보정되는 양은 단위가 angstrom 이냐 magnitude 이냐에 따라 달라짐
+# H-beta 의 경우 angstrom
+
+corr = hdu['SPECINDEX_CORR'].data[spec_ind['Hb'],:,:] # velocity dispersion에 대해
+hb_corr = hb_raw*corr # 보정
+
+pyplot.clf()
+pyplot.imshow(hb_corr,origin='lower', cmap='inferno', interpolation='nearest')
+pyplot.colorbar(label=spec_unit[spec_ind['Hb']])
+
+# 그 결과는 velocity dispersion에 대해 보정된 spectral-index
+
