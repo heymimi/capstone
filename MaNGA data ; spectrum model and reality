@@ -1,0 +1,37 @@
+# MaNGA DAP 불러오고 시각화
+# 예시 ; 8718-9101 or 8603-12704 or 8613-12702 or 7443-12703
+# DAP 파일 이용하여 데이터를 시각화,분석할 수 있음 - 사이트에서는 Marvin을 추천함
+
+# 검은 선이 실제 은하 스펙트럼 그래프
+# 초록 선이 연속체 스펙트럼 그래프(모델)
+# 연속체일때의 스펙트럼과 실제 스펙트럼을 비교해서 해당 은하에 대한 방출선이 무엇인지 파악 가능할 것.
+
+# 이 때 사용된 파일은 marvin 홈페이지에서 다운로드 - Default ModelCube 파일 필요
+
+import numpy
+from astropy.io import fits
+from matplotlib import pyplot
+pyplot.ion()
+
+hdu = fits.open('C:/Users/CHOI/Desktop/manga-8718-9101-MAPS-HYB10-GAU-MILESHC.fits') # maps 파일 불러오기
+hdu.info()
+
+snr = numpy.ma.MaskedArray(hdu['BIN_SNR'].data, mask=hdu['BINID'].data[0,:,:] < 0)
+j,i = numpy.unravel_index(snr.argmax(), snr.shape)
+
+hdu_cube = fits.open('C:/Users/CHOI/Desktop/manga-8718-9101-LOGCUBE-HYB10-GAU-MILESHC.fits')  #DAP MODELCUBE file
+hdu_drpcube = fits.open('C:/Users/CHOI/Desktop/manga-8718-9101-LOGCUBE.fits') #DRP LOGCUBE file
+
+wave=hdu_cube['wave'].data
+flux = numpy.ma.MaskedArray(hdu_drpcube['FLUX'].data[:,j,i],mask=hdu_drpcube['MASK'].data[:,j,i] > 0)
+model = numpy.ma.MaskedArray(hdu_cube['MODEL'].data[:,j,i],mask=hdu_cube['MASK'].data[:,j,i]>0)
+
+
+flux = numpy.ma.MaskedArray(hdu_cube['FLUX'].data[:,j,i],mask=hdu_cube['MASK'].data[:,j,i] > 0)
+stellarcontinuum = numpy.ma.MaskedArray(hdu_cube['MODEL'].data[:,j,i] - hdu_cube['EMLINE'].data[:,j,i] - hdu_cube['EMLINE_BASE'].data[:,j,i], mask=hdu_cube['MASK'].data[:,j,i] > 0)
+
+pyplot.clf()
+pyplot.step(wave, flux, where='mid', color='k', lw=0.5,label='flux')
+pyplot.plot(wave, stellarcontinuum, color='g', lw=1,label='stellar cont.')
+pyplot.ylim(0,3.7)
+pyplot.legend()
